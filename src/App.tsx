@@ -1,200 +1,212 @@
-import { useState, useEffect } from "react";
-import { BrowserProvider, ethers } from "ethers";
-import "./helpers/interface"; // ✅ ensures window.ethereum is recognized by TS
-import type { Signer } from "ethers";
+import { useState } from "react";
+import { BrowserProvider, Contract, ethers } from "ethers";
+import OwnerWalletABI from "./abi/OwnerWallet.json";
+import KTTokenABI from "./abi/KTToken.json";
 
-const App = () => {
-  const [show, setShow] = useState<boolean>(false);
-  const [address, setAddress] = useState<string | null>(null);
-  const [provider, setProvider] = useState<BrowserProvider | null>(null);
-  const [signer, setSigner] = useState<Signer | null>(null);
-  const [inputValue, setInputValue] = useState<string>("");
-  const [isTrue, setIsTrue] = useState<boolean>(false);
+const CONTRACT_ADDRESS = "0x6a3C185c75D522228B2CE12576aD8068BA8be3b6";
+const CONTRACT_ADDRESS_KT = "0x00Ba66B6f4b9Ec382AAee325d1dc0C130a1C68CF";
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setInputValue(e.target.value);
+function App() {
+  const [currentAccount, setCurrentAccount] = useState<string | null>(null);
+  const [recipient, setRecipient] = useState<string>("");
+  const [ktBalance, setKTBalance] = useState<string>("");
+
+  const connectWallet = async () => {
+    if (!window.ethereum) return alert("MetaMask not found");
+    const provider = new BrowserProvider(window.ethereum);
+    const accounts = await provider.send("eth_requestAccounts", []);
+    setCurrentAccount(accounts[0]);
   };
 
-  const sendTransaction = async () => {
-    if (!signer) {
-      alert("Please connect your wallet first!");
-      return;
-    }
-
-    if (!inputValue) {
-      alert("Please enter a valid recipient address!");
-      return;
-    }
-
-    try {
-      const tx = await signer.sendTransaction({
-        to: inputValue,
-        value: ethers.parseEther("0.001"),
-      });
-      console.log("Transaction sent:", tx);
-      await tx.wait();
-      setIsTrue(true);
-      console.log("Transaction confirmed:", tx);
-    } catch (error) {
-      console.error("Transaction failed:", error);
-    }
+  const deposit = async () => {
+    if (!window.ethereum) return alert("MetaMask not found");
+    const provider = new BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new Contract(CONTRACT_ADDRESS, OwnerWalletABI.abi, signer);
+    const tx = await contract.deposit({ value: ethers.parseEther("0.01") });
+    await tx.wait();
+    alert("✅ Deposited 0.01 ETH");
   };
 
-  // ✅ Function to connect MetaMask
-  const handleClick = async () => {
-    if (!window.ethereum) {
-      alert("Please install MetaMask!");
-      return;
-    }
-
-    try {
-      // 1️⃣ Request account access → triggers MetaMask popup
-      const accounts = await window.ethereum.request({
-        method: "eth_requestAccounts",
-      });
-
-      // 2️⃣ Store connected address
-      const userAddress = accounts[0];
-      setAddress(userAddress);
-
-      // 3️⃣ Create ethers provider & signer
-      const provider = new BrowserProvider(window.ethereum);
-      const signer = await provider.getSigner();
-      setProvider(provider);
-      setSigner(signer);
-
-      console.log("✅ Connected address:", userAddress);
-      console.log("✅ Provider:", provider);
-      console.log("✅ Signer:", signer);
-    } catch (error) {
-      console.error("❌ MetaMask connection failed:", error);
-    }
+  const transferEth = async () => {
+    if (!recipient) return alert("Enter recipient address");
+    if (!window.ethereum) return alert("MetaMask not found");
+    const provider = new BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new Contract(CONTRACT_ADDRESS, OwnerWalletABI.abi, signer);
+    const tx = await contract.transferTo(recipient, ethers.parseEther("0.01"));
+    await tx.wait();
+    alert(`✅ Sent 0.01 ETH to ${recipient}`);
   };
 
-  // ✅ Optional: detect account changes automatically
-  useEffect(() => {
-    if (window.ethereum) {
-      window.ethereum.on("accountsChanged", (accounts: string[]) => {
-        setAddress(accounts.length > 0 ? accounts[0] : null);
-      });
-    }
-  }, []);
+  const getBalanceKT = async () => {
+    if (!window.ethereum) return alert("MetaMask not found");
+    const provider = new BrowserProvider(window.ethereum);
+    const contract = new Contract(
+      CONTRACT_ADDRESS_KT,
+      KTTokenABI.abi,
+      provider
+    );
+    const bal = await contract.getBalanceKT();
+    setKTBalance(`${ethers.formatUnits(bal, 18)} KT`);
+  };
+
+  const transferKT = async () => {
+    if (!recipient) return alert("Enter recipient address");
+    if (!window.ethereum) return alert("MetaMask not found");
+    const provider = new BrowserProvider(window.ethereum);
+    const signer = await provider.getSigner();
+    const contract = new Contract(CONTRACT_ADDRESS_KT, KTTokenABI.abi, signer);
+    const tx = await contract.transferKT(
+      recipient,
+      ethers.parseUnits("0.1", 18)
+    );
+    await tx.wait();
+    alert(`✅ Sent 0.1 KT to ${recipient}`);
+  };
+
+  const getBalance = async () => {
+    if (!window.ethereum) return alert("MetaMask not found");
+    const provider = new BrowserProvider(window.ethereum);
+    const contract = new Contract(
+      CONTRACT_ADDRESS,
+      OwnerWalletABI.abi,
+      provider
+    );
+    const bal = await contract.getBalance();
+    alert(`💰 Contract Balance: ${ethers.formatEther(bal)} ETH`);
+  };
+
+  // ---------- STYLES (Inline) ----------
+  const container: React.CSSProperties = {
+    minHeight: "100vh",
+    background: "#121212",
+    color: "white",
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: "18px",
+    padding: "20px",
+    fontFamily: "Arial, sans-serif",
+  };
+
+  const button: React.CSSProperties = {
+    padding: "12px 22px",
+    borderRadius: "8px",
+    border: "none",
+    cursor: "pointer",
+    fontWeight: "bold",
+    fontSize: "15px",
+    transition: "0.25s",
+  };
+
+  const primaryBtn = {
+    ...button,
+    background: "#007bff",
+  };
+
+  const successBtn = {
+    ...button,
+    background: "#28a745",
+  };
+
+  const warningBtn = {
+    ...button,
+    background: "#f0ad4e",
+  };
+
+  const inputBox: React.CSSProperties = {
+    padding: "10px",
+    width: "260px",
+    borderRadius: "6px",
+    border: "1px solid #555",
+    background: "#1e1e1e",
+    color: "white",
+    outline: "none",
+  };
 
   return (
-    <>
-      {show ? (
-        <>
-          <div
-            style={{
-              backgroundColor: "black",
-              color: "white",
-              height: "100vh",
-              display: "flex",
-              justifyContent: "center",
-              alignItems: "center",
-              flexDirection: "column",
-              gap: "20px",
-            }}
-          >
-            <h2>Hello, World!</h2>
-            <input type="text" onChange={handleChange} />
-            <p>You typed: {inputValue}</p>
-            <button
-              onClick={sendTransaction}
-              style={{
-                padding: "10px 20px",
-                fontSize: "16px",
-                backgroundColor: "#28A745",
-                color: "white",
-                border: "none",
-                borderRadius: "5px",
-                cursor: "pointer",
-              }}
-            >
-              send Money
-            </button>
-            {isTrue && (
-              <p style={{ color: "yellow" }}>Transaction Successful!</p>
-            )}
-            {address ? (
-              <p>
-                Connected Account:{" "}
-                <span style={{ color: "lime" }}>{address}</span>
-              </p>
-            ) : (
-              <p>No Wallet Connected</p>
-            )}
-          </div>
+    <div style={container}>
+      <h1 style={{ marginBottom: "10px" }}>Owner Wallet DApp</h1>
 
-          <button
-            style={{
-              position: "absolute",
-              top: "20px",
-              right: "20px",
-              padding: "10px 20px",
-              fontSize: "16px",
-              backgroundColor: "#FF4136",
-              color: "white",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-            }}
-            onClick={() => setShow((prev) => !prev)}
-          >
-            Stop Show
-          </button>
-        </>
-      ) : (
-        <div
-          style={{
-            backgroundColor: "white",
-            color: "black",
-            height: "100vh",
-            display: "flex",
-            justifyContent: "center",
-            alignItems: "center",
-          }}
+      {!currentAccount ? (
+        <button
+          style={primaryBtn}
+          onMouseOver={(e) => (e.currentTarget.style.background = "#3399ff")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "#007bff")}
+          onClick={connectWallet}
         >
-          <button
-            style={{
-              position: "absolute",
-              top: "50%",
-              left: "50%",
-              transform: "translate(-50%, -50%)",
-              padding: "10px 20px",
-              fontSize: "16px",
-              backgroundColor: "#007BFF",
-              color: "white",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-            }}
-            onClick={() => setShow(true)}
-          >
-            Show Message
-          </button>
-
-          <button
-            onClick={handleClick}
-            style={{
-              position: "absolute",
-              bottom: "20px",
-              right: "20px",
-              padding: "10px 20px",
-              fontSize: "16px",
-              backgroundColor: "#28A745",
-              color: "white",
-              border: "none",
-              borderRadius: "5px",
-              cursor: "pointer",
-            }}
-          >
-            {address ? "Wallet Connected ✅" : "Connect Wallet"}
-          </button>
-        </div>
+          Connect Wallet
+        </button>
+      ) : (
+        <p style={{ color: "#4ee44e" }}>Connected: {currentAccount}</p>
       )}
-    </>
+
+      <button
+        style={successBtn}
+        onMouseOver={(e) => (e.currentTarget.style.background = "#4edc6a")}
+        onMouseOut={(e) => (e.currentTarget.style.background = "#28a745")}
+        onClick={deposit}
+      >
+        Deposit 0.01 ETH
+      </button>
+
+      <div style={{ display: "flex", gap: "10px" }}>
+        <input
+          style={inputBox}
+          type="text"
+          placeholder="Recipient Wallet Address"
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value)}
+        />
+        <button
+          style={primaryBtn}
+          onMouseOver={(e) => (e.currentTarget.style.background = "#3399ff")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "#007bff")}
+          onClick={transferEth}
+        >
+          Send
+        </button>
+      </div>
+      <div style={{ marginTop: "20px", textAlign: "center" }}>
+        <button
+          style={primaryBtn}
+          onMouseOver={(e) => (e.currentTarget.style.background = "#3399ff")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "#007bff")}
+          onClick={transferKT}
+        >
+          Send 0.1 KT Token
+        </button>
+        <button
+          style={{ ...primaryBtn, marginLeft: "10px" }}
+          onMouseOver={(e) => (e.currentTarget.style.background = "#3399ff")}
+          onMouseOut={(e) => (e.currentTarget.style.background = "#007bff")}
+          onClick={getBalanceKT}
+        >
+          Show My KT Balance
+        </button>
+        <div>
+          {ktBalance ? (
+            <p style={{ marginTop: "10px", color: "green" }}>
+              KT Balance: {ktBalance}
+            </p>
+          ) : (
+            <p style={{ marginTop: "10px", color: "red" }}>KT Balance: N/A</p>
+          )}
+        </div>
+      </div>
+
+      <button
+        style={warningBtn}
+        onMouseOver={(e) => (e.currentTarget.style.background = "#f5c06b")}
+        onMouseOut={(e) => (e.currentTarget.style.background = "#f0ad4e")}
+        onClick={getBalance}
+      >
+        Show Contract Balance
+      </button>
+    </div>
   );
-};
+}
 
 export default App;
